@@ -29,7 +29,6 @@ export function Exchange() {
     const [totalTrades, setTotalTrades] = useState(0);
     const [statWins, setStatWins] = useState(0);
     const [statLosses, setStatLosses] = useState(0);
-
     const [signals, setSignals] = useState<SignalData[]>([]);
     
     // 🔘 រក្សាទុកស្ថានភាពប៊ូតុងស្កែនទាំងអស់នៅក្នុង Object តែមួយ (Dynamic Scans State)
@@ -39,16 +38,20 @@ export function Exchange() {
 
     const [asset, setAsset] = useState<AssetKey>("xau");
     const [price, setPrice] = useState<number>(0);
-    const [selectedTF, setSelectedTF] = useState<"ALL" | "5M" | "15M" | "1H" | "4H">("ALL");
+    
+    // 🎯 ប្តូរលំនាំដើមមក Lock 1H ដើម្បីកុំឱ្យ Random Signal លោតមកញ៉េរញ៉ៃ
+    const [selectedTF, setSelectedTF] = useState<"ALL" | "5M" | "15M" | "1H" | "4H">("1H");
 
     const containerRef = useRef<HTMLDivElement>(null);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    const API = "http://127.0.0.1:8000/api";
+    // 🌐 បច្ចុប្បន្នភាពលីងទៅកាន់ Render Host ផ្លូវការរបស់បង
+    const API = "https://ai-dash-bx4b.onrender.com/api";
 
-    const fetchSignals = async (currentAsset = asset) => {
+    // 🔄 ទាញទិន្នន័យដោយភ្ជាប់ជាមួយ ?tf=... ទៅឱ្យប្រព័ន្ធ Back-end កាត់តម្រឹម
+    const fetchSignals = async (currentAsset = asset, currentTF = selectedTF) => {
         try {
-            const res = await fetch(`${API}/signals`);
+            const res = await fetch(`${API}/signals?tf=${currentTF}`);
             if (!res.ok) throw new Error("Offline");
             const data = await res.json();
 
@@ -78,15 +81,16 @@ export function Exchange() {
         }
     };
 
+    // រត់ទាញទិន្នន័យរៀងរាល់ ២ វិនាទីម្តង ពេលមានការផ្លាស់ប្តូរ Asset ឬ Timeframe
     useEffect(() => {
-        fetchSignals(asset);
+        fetchSignals(asset, selectedTF);
         if (intervalRef.current) clearInterval(intervalRef.current);
-        intervalRef.current = setInterval(() => fetchSignals(asset), 2000);
+        intervalRef.current = setInterval(() => fetchSignals(asset, selectedTF), 2000);
 
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current);
         };
-    }, [asset]);
+    }, [asset, selectedTF]);
 
     // ⚡ មុខងារចុចប៊ូតុង Toggle Scan ដាច់ដោយឡែកពីគ្នាពិតប្រាកដ
     const handleToggleScan = async () => {
@@ -100,13 +104,13 @@ export function Exchange() {
                 [asset]: data[responseKey]
             }));
 
-            setTimeout(() => fetchSignals(asset), 200);
+            setTimeout(() => fetchSignals(asset, selectedTF), 200);
         } catch {
             alert("Backend Connection Refused");
         }
     };
 
-    // 📈 រៀបចំ TradingView Widget - កែសម្រួលប្រព័ន្ធម៉ោង និងរបារឧបករណ៍ដូរ Timeframe
+    // 📈 រៀបចំ TradingView Widget - ផ្លាស់ប្តូរទៀនស្វ័យប្រវត្តិតាមប៊ូតុង Timeframe លើ UI
     useEffect(() => {
         if (!containerRef.current) return;
         containerRef.current.innerHTML = "";
@@ -122,17 +126,25 @@ export function Exchange() {
         script.onload = () => {
             if (window.TradingView) {
                 const currentConfig = SUPPORTED_ASSETS.find(a => a.key === asset);
+                
+                // 💡 បំប្លែងតួអក្សរ Timeframe ទៅជា Interval របស់ TradingView Widget
+                let tvInterval = "60"; 
+                if (selectedTF === "5M") tvInterval = "5";
+                else if (selectedTF === "15M") tvInterval = "15";
+                else if (selectedTF === "1H") tvInterval = "60";
+                else if (selectedTF === "4H") tvInterval = "240";
+
                 new window.TradingView.widget({
                     autosize: true,
                     symbol: currentConfig ? currentConfig.tvSymbol : "BINANCE:BTCUSD",
-                    interval: "15",               // ម៉ោងលំនាំដើមពេលទើបបើកទំព័រដំបូង
+                    interval: tvInterval,         
                     timezone: "Asia/Jakarta",      // 🇰🇭 ប្រើប្រាស់ល្វែងម៉ោង GMT+7 ដែល Widget ស្គាល់ផ្លូវការ
                     theme: "dark",
                     style: "1",
                     locale: "en",
                     container_id: id,
                     hide_top_toolbar: false,      // 🔥 បើករបារឧបករណ៍ខាងលើ ដើម្បីបង្ហាញប៊ូតុងដូរ Timeframe សេរី
-                    hide_side_toolbar: false,     // បើករបារឧបករណ៍ឆ្វេងសម្រាប់គូរគំនូសបច្ចេកទេស
+                    hide_side_toolbar: false,     // បើករបារឧបករណ៍ឆ្វេងសម្រាប់គូរគំនូសបច្គេកទេស
                     allow_symbol_change: true,    // អនុញ្ញាតឱ្យផ្លាស់ប្តូរគូកាក់នៅលើ Widget បាន
                     enable_publishing: false,
                     withdateranges: true,         // បើកទិន្នន័យ Range ម៉ោងតាមតំបន់
@@ -146,12 +158,7 @@ export function Exchange() {
         return () => {
             if (containerRef.current) containerRef.current.innerHTML = "";
         };
-    }, [asset]);
-
-    const filteredSignals = signals.filter((s) => {
-        if (selectedTF === "ALL") return true;
-        return s.timeframe === selectedTF;
-    });
+    }, [asset, selectedTF]); // 🔄 បើកក្រាហ្វឡើងវិញភ្លាមៗ ពេលប្តូរ Timeframe ឬប្តូរកាក់
 
     const isCurrentAssetScanning = scans[asset] || false;
     const decimalPlaces = asset === "ada" ? 4 : 2;
@@ -237,12 +244,12 @@ export function Exchange() {
 
                     {/* SIGNALS LIST */}
                     <div className="p-3 overflow-y-auto space-y-3 flex-1">
-                        {filteredSignals.length === 0 ? (
+                        {signals.length === 0 ? (
                             <div className="text-gray-600 text-xs text-center mt-10 animate-pulse">
                                 No active setups on {selectedTF} loop...
                             </div>
                         ) : (
-                            filteredSignals.map((s) => (
+                            signals.map((s) => (
                                 <div
                                     key={s.id}
                                     className={`p-3 border rounded bg-black/40 transition-all ${
