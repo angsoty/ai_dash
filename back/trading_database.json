@@ -1,0 +1,249 @@
+{
+    "BTCUSDT": {
+        "current_signals": {
+            "5M": null,
+            "15M": null,
+            "1H": {
+                "id": 1782158742,
+                "time": "2026-06-23 01:00:00",
+                "type": "SELL \ud83d\udd34",
+                "timeframe": "1H",
+                "entry": 64264.74,
+                "sl": 64658.77,
+                "tp": 63673.69,
+                "confidence": 93,
+                "status": "OPEN"
+            },
+            "4H": null
+        },
+        "last_processed_candle": {
+            "5M": "2026-06-23 03:20:00",
+            "15M": "2026-06-23 03:00:00",
+            "1H": "2026-06-23 01:00:00",
+            "4H": "2026-06-22 19:00:00"
+        },
+        "history": [
+            {
+                "id": 1782155805,
+                "time": "2026-06-22 19:00:00",
+                "type": "BUY \ud83d\udfe2",
+                "timeframe": "4H",
+                "entry": 64765.42,
+                "sl": 64517.04,
+                "tp": 65138.0,
+                "confidence": 97,
+                "status": "SL"
+            },
+            {
+                "id": 1782157413,
+                "time": "2026-06-23 01:55:00",
+                "type": "SELL \ud83d\udd34",
+                "timeframe": "5M",
+                "entry": 64264.74,
+                "sl": 64329.2,
+                "tp": 64168.05,
+                "confidence": 91,
+                "status": "SL"
+            },
+            {
+                "id": 1782156335,
+                "time": "2026-06-23 01:45:00",
+                "type": "SELL \ud83d\udd34",
+                "timeframe": "15M",
+                "entry": 64264.74,
+                "sl": 64452.0,
+                "tp": 63983.85,
+                "confidence": 86,
+                "status": "SL"
+            },
+            {
+                "id": 1782161390,
+                "time": "2026-06-23 02:50:00",
+                "type": "BUY \ud83d\udfe2",
+                "timeframe": "5M",
+                "entry": 64385.31,
+                "sl": 64273.32,
+                "tp": 64553.29,
+                "confidence": 86,
+                "status": "TP"
+            },
+            {
+                "id": 1782161970,
+                "time": "2026-06-23 02:55:00",
+                "type": "BUY \ud83d\udfe2",
+                "timeframe": "5M",
+                "entry": 64431.02,
+                "sl": 64386.12,
+                "tp": 64498.37,
+                "confidence": 87,
+                "status": "TP"
+            },
+            {
+                "id": 1782162371,
+                "time": "2026-06-23 03:00:00",
+                "type": "BUY \ud83d\udfe2",
+                "timeframe": "5M",
+                "entry": 64564.09,
+                "sl": 64411.09,
+                "tp": 64793.59,
+                "confidence": 91,
+                "status": "SL"
+            },
+            {
+                "id": 1782164290,
+                "time": "2026-06-23 03:00:00",
+                "type": "BUY \ud83d\udfe2",
+                "timeframe": "15M",
+                "entry": 64460.99,
+                "sl": 64411.09,
+                "tp": 64535.84,
+                "confidence": 94,
+                "status": "SL"
+            },
+            {
+                "id": 1782163906,
+                "time": "2026-06-23 03:20:00",
+                "type": "SELL \ud83d\udd34",
+                "timeframe": "5M",
+                "entry": 64360.0,
+                "sl": 64423.04,
+                "tp": 64265.44,
+                "confidence": 87,
+                "status": "SL"
+            }
+        ],
+        "wins": 2,
+        "losses": 6
+    },
+    "XAUUSD": {
+        "current_signals": {
+            "5M": null,
+            "15M": null,
+            "1H": null,
+            "4H": null
+        },
+        "last_processed_candle": {
+            "5M": "2026-06-23 01:20:00",
+            "15M": "",
+            "1H": "",
+            "4H": ""
+        },
+        "history": [
+            {
+                "id": 1782158133,
+                "time": "2026-06-23 01:20:00",
+                "type": "BUY \ud83d\udfe2",
+                "timeframe": "5M",
+                "entry": 4207.3,
+                "sl": 4172.9,
+                "tp": 4258.9,
+                "confidence": 94,
+                "status": "SL"
+            }
+        ],
+        "wins": 0,
+        "losses": 1
+    },
+    "SOLUSDT": {
+        "current_signals": {
+            "5M": null,
+            "15M": null,
+            "1H": null,
+            "4H": {
+                "id": 1782163635,
+                "time": "2026-06-22 23:00:00",
+                "type": "SELL \ud83d\udd34 [SMC FVG]",
+                "timeframe": "4H",
+                "entry": 73.49,
+                "sl": 74.35,
+                "tp": 71.77,
+                "confidence": 98,
+                "status": "OPEN"
+            }
+        },
+        "last_processed_candle": {
+            "5M": "",
+            "15M": "",
+            "1H": "",
+            "4H": "2026-06-22 23:00:00"
+        },
+        "history": [],
+        "wins": 0,
+        "losses": 0
+    },
+    "BNBUSDT": {
+        "current_signals": {
+            "5M": null,
+            "15M": null,
+            "1H": null,
+            "4H": null
+        },
+        "last_processed_candle": {
+            "5M": "2026-06-23 04:05:00",
+            "15M": "",
+            "1H": "",
+            "4H": ""
+        },
+        "history": [
+            {
+                "id": 1782167317,
+                "time": "2026-06-23 04:10:23",
+                "type": "BUY \ud83d\udfe2 [SMC FVG]",
+                "timeframe": "5M",
+                "entry": 590.79,
+                "sl": 590.61,
+                "tp": 591.15,
+                "confidence": 89,
+                "status": "TP"
+            }
+        ],
+        "wins": 1,
+        "losses": 0
+    },
+    "ADAUSDT": {
+        "current_signals": {
+            "5M": null,
+            "15M": null,
+            "1H": null,
+            "4H": null
+        },
+        "last_processed_candle": {
+            "5M": "",
+            "15M": "",
+            "1H": "",
+            "4H": ""
+        },
+        "history": [],
+        "wins": 0,
+        "losses": 0
+    },
+    "ZECUSDT": {
+        "current_signals": {
+            "5M": null,
+            "15M": null,
+            "1H": null,
+            "4H": null
+        },
+        "last_processed_candle": {
+            "5M": "2026-06-23 04:10:00",
+            "15M": "",
+            "1H": "",
+            "4H": ""
+        },
+        "history": [
+            {
+                "id": 1782163960,
+                "time": "2026-06-23 04:15:07",
+                "type": "SELL \ud83d\udd34 [SMC FVG]",
+                "timeframe": "5M",
+                "entry": 451.755,
+                "sl": 453.08,
+                "tp": 449.105,
+                "confidence": 90,
+                "status": "TP"
+            }
+        ],
+        "wins": 1,
+        "losses": 0
+    }
+}
