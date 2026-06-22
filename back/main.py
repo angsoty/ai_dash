@@ -147,10 +147,6 @@ def scan_asset_tf(asset, symbol, tf):
         # 🧠 ចាប់ផ្តើម SMC/ICT Logic លើទៀនដែលបិទរួចរាល់ (Candle Index i)
         i = len(df) - 2  
         
-        # ❌ កូដចាស់៖ ទាញម៉ោងបើកទៀនពី Yahoo Index
-        # candle_time = str(df.index[i].strftime('%Y-%m-%d %H:%M:%S'))
-        
-        # ✅ កូដថ្មី៖ ចាប់យកម៉ោងបច្ចុប្បន្ននៅកម្ពុជា (GMT+7) ភ្លាមៗពេលដែលរកឃើញ Setup ថ្មី
         khmer_now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7)))
         candle_time = khmer_now.strftime('%Y-%m-%d %H:%M:%S')
 
@@ -241,20 +237,38 @@ def engine_loop():
 threading.Thread(target=engine_loop, daemon=True).start()
 
 @app.get("/api/signals")
-def get_signals():
+def get_signals(tf: str = "ALL"):
+    """
+    🎯 បច្ចុប្បន្នភាព៖ ទទួលយកប៉ារ៉ាម៉ែត្រ `tf` (ឧទាហរណ៍៖ ?tf=1H) ដើម្បីចម្រាញ់ទិន្នន័យ
+    បើបងរើសម៉ោងណា វានឹងបញ្ជូនទៅតែម៉ោងនោះប៉ុណ្ណោះ មិនលាយឡំឡើយ។
+    """
+    target_tf = tf.upper() if tf else "ALL"
+    
     with LOCK:
         res = {}
+        # ផ្ញើស្ថានភាពប៊ូតុងស្កែនធម្មតា
         for info in ASSETS_CONFIG.values():
             res[f"isScanning{info['key'].upper()}"] = STATE["scans"][info["key"]]
             
         for asset, info in ASSETS_CONFIG.items():
             key = info["key"]
             all_sigs = []
+            
+            # 1. ត្រងយក Current Signals តាម Timeframe ដែលបានជ្រើសរើស
             for tf_key, sig in STATE[asset]["current_signals"].items():
                 if sig:
-                    all_sigs.append(sig)
-            all_sigs.extend(STATE[asset]["history"][-30:])
+                    if target_tf == "ALL" or tf_key == target_tf:
+                        all_sigs.append(sig)
             
+            # 2. ត្រងយក History Signals តាម Timeframe ដែលបានជ្រើសរើស
+            filtered_history = STATE[asset]["history"]
+            if target_tf != "ALL":
+                filtered_history = [s for s in filtered_history if s.get("timeframe", "").upper() == target_tf]
+            
+            # យកត្រឹម 30 setups ចុងក្រោយដែលចម្រាញ់រួច
+            all_sigs.extend(filtered_history[-30:])
+            
+            # គណនា Win Rate ផ្អែកលើទិន្នន័យរួម ឬទិន្នន័យដែល Filter រួច (ក្នុងកូដនេះរក្សាការគណនារួមដើម្បីឱ្យដឹង WR សរុប)
             wins = STATE[asset]["wins"]
             losses = STATE[asset]["losses"]
             total = wins + losses
@@ -296,6 +310,7 @@ def clear_history_only(asset_key: str):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
 @app.get("/healthz")
 def health():
     return {"status": "ok"}
