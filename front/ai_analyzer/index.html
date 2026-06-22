@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nexus.AI Quant Trading Engine</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              // បងអាចថែម Custom Color ត្រង់នេះបើមាន
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* 🌌 ផ្ទៃខាងក្រោយបែប 3D Grid Space លំដាប់ហ្គេម AAA */
+      body {
+        background-color: #030712;
+        background-image: 
+          linear-gradient(rgba(16, 185, 129, 0.02) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(16, 185, 129, 0.02) 1px, transparent 1px);
+        background-size: 40px 40px;
+        background-position: center;
+        position: relative;
+      }
+    
+      /* ✨ បែបផែនពន្លឺលោតចាំងលើអក្សរ */
+      .text-shadow-emerald {
+        text-shadow: 0 0 10px rgba(52, 211, 153, 0.6);
+      }
+    
+      /* 📟 Scanline Overlay ការពារការចម្លង ដូចអេក្រង់យោធា */
+      body::before {
+        content: " ";
+        display: block;
+        position: fixed;
+        top: 0; left: 0; bottom: 0; right: 0;
+        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+        z-index: 9999;
+        background-size: 100% 4px, 6px 100%;
+        pointer-events: none;
+        opacity: 0.6;
+      }
+    </style>
+  </head>
+  <body class="bg-[#0B0E11] text-[#f3f4f6]">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  background-color: #0B0E11;
+  color: #f3f4f6;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Custom Scrollbar */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: #0b0e11;
+  color: white;
+  font-family: Inter, sans-serif;
+}
+@keyframes marquee {
+  0% {
+      transform: translateX(0);
+  }
+  100% {
+      transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  display: flex;
+  animation: marquee 100s linear infinite;
+  will-change: transform;
+}
+@keyframes marqueeSmooth {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marqueeSmooth {
+  display: flex;
+  width: max-content;
+  animation: marqueeSmooth 25s linear infinite;
+  will-change: transform;
+}
