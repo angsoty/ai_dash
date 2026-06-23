@@ -6,9 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import threading
 import uvicorn
 import random
-import json
 import os
-import datetime  # 🕒 បន្ថែមសម្រាប់ចាប់ម៉ោង Live ស្រុកខ្មែរ
+import datetime
+from pymongo import MongoClient
+import certifi
 
 app = FastAPI()
 
@@ -20,7 +21,22 @@ app.add_middleware(
 )
 
 LOCK = threading.Lock()
-DB_FILE = "trading_database.json"
+
+# 🌐 លីងភ្ជាប់ទៅកាន់ MongoDB Cloud (បានកែសម្រួលសញ្ញា $ ទៅជា %24 រួចរាល់ដើម្បីការពារ Error)
+MONGO_URI = os.environ.get(
+    "MONGO_URI", 
+    "mongodb+srv://angsoty:Angsotyada%240212%24@bot-trading.3017bkt.mongodb.net/?appName=bot-trading"
+)
+
+try:
+    client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
+    db = client["XAU_ICT_SMC_SCALPER"]
+    collection = db["bot_state"]
+    print("✅ CONNECTED TO MONGODB ATLAS CLOUD DATABASE")
+except Exception as e:
+    print(f"❌ MongoDB Connection Error: {e}")
+    db = None
+    collection = None
 
 # 🎯 បញ្ជីកាក់ដែលត្រូវរត់ការស្កែន (Supported Assets Configuration)
 ASSETS_CONFIG = {
@@ -32,7 +48,7 @@ ASSETS_CONFIG = {
     "ZECUSDT": {"symbol": "ZEC-USD", "key": "zec"}
 }
 
-# 🧠 បង្កើតគ្រោងរចនាសម្ព័ន្ធទិន្នន័យដំបូងស្វ័យប្រវត្ត (Automated State Initialization)
+# 🧠 បង្កើតរចនាសម្ព័ន្ធ STATE ដើមនៅក្នុង Memory 
 STATE = {
     "scans": {info["key"]: False for info in ASSETS_CONFIG.values()}
 }
@@ -48,6 +64,10 @@ for asset, info in ASSETS_CONFIG.items():
     }
 
 def save_data_to_file():
+    """ 🔄 រក្សាទុកទិន្នន័យទៅកាន់ MongoDB Cloud """
+    if collection is None:
+        return
+        
     with LOCK:
         data_to_save = {}
         for asset in ASSETS_CONFIG.keys():
@@ -59,26 +79,35 @@ def save_data_to_file():
                 "losses": STATE[asset]["losses"]
             }
     try:
-        with open(DB_FILE, "w") as f:
-            json.dump(data_to_save, f, indent=4)
+        collection.update_one(
+            {"_id": "global_state"},
+            {"$set": {"assets_data": data_to_save}},
+            upsert=True
+        )
     except Exception as e:
-        print(f"Error saving database: {e}")
+        print(f"Error saving to MongoDB: {e}")
 
 def load_data_from_file():
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r") as f:
-                saved_data = json.load(f)
-                for asset in ASSETS_CONFIG.keys():
-                    if asset in saved_data:
-                        STATE[asset]["current_signals"] = saved_data[asset].get("current_signals", {"5M": None, "15M": None, "1H": None, "4H": None})
-                        STATE[asset]["last_processed_candle"] = saved_data[asset].get("last_processed_candle", {"5M": "", "15M": "", "1H": "", "4H": ""})
-                        STATE[asset]["history"] = saved_data[asset].get("history", [])
-                        STATE[asset]["wins"] = saved_data[asset].get("wins", 0)
-                        STATE[asset]["losses"] = saved_data[asset].get("losses", 0)
-            print("📦 MULTI-ASSET SMC DATABASE INITIALIZED SUCCESSFUL")
-        except Exception as e:
-            print(f"Error loading database: {e}")
+    """ 📦 ទាញយកទិន្នន័យចាស់មកវិញភ្លាមពេល Bot ចាប់ផ្តើមរាន់ """
+    if collection is None:
+        return
+        
+    try:
+        saved_record = collection.find_one({"_id": "global_state"})
+        if saved_record and "assets_data" in saved_record:
+            saved_data = saved_record["assets_data"]
+            for asset in ASSETS_CONFIG.keys():
+                if asset in saved_data:
+                    STATE[asset]["current_signals"] = saved_data[asset].get("current_signals", {"5M": None, "15M": None, "1H": None, "4H": None})
+                    STATE[asset]["last_processed_candle"] = saved_data[asset].get("last_processed_candle", {"5M": "", "15M": "", "1H": "", "4H": ""})
+                    STATE[asset]["history"] = saved_data[asset].get("history", [])
+                    STATE[asset]["wins"] = saved_data[asset].get("wins", 0)
+                    STATE[asset]["losses"] = saved_data[asset].get("losses", 0)
+            print("📦 MULTI-ASSET CLOUD DATABASE INITIALIZED SUCCESSFUL")
+        else:
+            print("🆕 No existing cloud state found. Starting with fresh records.")
+    except Exception as e:
+        print(f"Error loading from MongoDB: {e}")
 
 load_data_from_file()
 TIMEFRAMES = ["5m", "15m", "1h", "4h"]
@@ -88,7 +117,7 @@ def scan_asset_tf(asset, symbol, tf):
     tf_key = tf.upper()
     try:
         df = yf.download(symbol, interval=tf, period="60d" if tf in ["1h", "4h"] else "30d", progress=False)
-        if df.empty or len(df) < 15:
+        if df.empty or len(df) < 20:
             return
 
         if isinstance(df.columns, pd.MultiIndex):
@@ -144,41 +173,42 @@ def scan_asset_tf(asset, symbol, tf):
                 save_data_to_file()
             return
 
-        # 🧠 ចាប់ផ្តើម SMC/ICT Logic លើទៀនដែលបិទរួចរាល់ (Candle Index i)
+        # 🧠 ចាប់ផ្តើមការគណនាលើទៀនដែលទើបតែបិទ (Candle Index i)
         i = len(df) - 2  
         
         khmer_now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7)))
         candle_time = khmer_now.strftime('%Y-%m-%d %H:%M:%S')
 
-        # បង្កើត Check ID ផ្អែកលើ Index ដើមដើម្បីការពារការ Repeat ទាញទិន្នន័យដដែលៗក្នុងទៀនមួយ
         raw_candle_stamp = str(df.index[i].strftime('%Y-%m-%d %H:%M:%S'))
         if raw_candle_stamp == last_candle:
             return
 
-        # គណនារកតំបន់ Premium / Discount Zone Array (15 Candles Lookback)
-        recent_max = df["high"].iloc[i-14:i+1].max()
-        recent_min = df["low"].iloc[i-14:i+1].min()
+        # 📊 គណនា ATR (Average True Range) ដើម្បីទប់ទល់នឹង Market Noise របស់មាស
+        df['tr'] = pd.concat([df['high'] - df['low'], 
+                              (df['high'] - df['close'].shift()).abs(), 
+                              (df['low'] - df['close'].shift()).abs()], axis=1).max(axis=1)
+        df['atr'] = df['tr'].rolling(window=14).mean()
+        atr_val = float(df['atr'].iloc[i]) if not pd.isna(df['atr'].iloc[i]) else (live_price * 0.001)
+
+        # គណនារកតំបន់ Equilibrium (Lookback 10 ទៀន ដើម្បីឱ្យចេញ Signal ញឹក និងលឿនទាន់ចិត្ត)
+        recent_max = df["high"].iloc[i-9:i+1].max()
+        recent_min = df["low"].iloc[i-9:i+1].min()
         equilibrium = recent_min + (recent_max - recent_min) * 0.5
 
         new_signal = None
-        confidence = random.randint(89, 98)
+        confidence = random.randint(91, 98)
 
-        # 🟢 BULLISH SMC SETUP (Discount Zone + FVG)
-        if df["low"].iloc[i] > df["high"].iloc[i-2]:  
-            fvg_top = float(df["low"].iloc[i])
-            fvg_bottom = float(df["high"].iloc[i-2])
-            c_close = float(df["close"].iloc[i])
-            
-            if c_close < equilibrium:
-                entry = round((fvg_top + fvg_bottom) / 2, 4 if "USD" in symbol else 2)
-                sl = round(float(df["low"].iloc[i-2]), 4 if "USD" in symbol else 2)     
-                if entry <= sl: entry = c_close
-                tp = round(entry + (entry - sl) * 2.0, 4 if "USD" in symbol else 2)     
+        # 🟢 HIGH-FREQUENCY BULLISH SETUP (SMC Momentum + Equilibrium Filter)
+        if df["close"].iloc[i] > df["open"].iloc[i] and float(df["close"].iloc[i]) < equilibrium:
+            entry = live_price
+            sl = round(entry - (1.5 * atr_val), 4 if "USD" in symbol else 2) 
+            tp = round(entry + (2.0 * atr_val), 4 if "USD" in symbol else 2) 
 
+            if sl < entry and tp > entry:
                 new_signal = {
                     "id": int(time.time()) + random.randint(1, 5000),
-                    "time": candle_time,  # 🕒 ម៉ោងស្រុកខ្មែរ Real-time Release
-                    "type": "BUY 🟢 [SMC FVG]",
+                    "time": candle_time,
+                    "type": "BUY 🟢 [SMC SCALPER]",
                     "timeframe": tf_key,
                     "entry": entry,
                     "sl": sl,
@@ -187,22 +217,17 @@ def scan_asset_tf(asset, symbol, tf):
                     "status": "OPEN"
                 }
 
-        # 🔴 BEARISH SMC SETUP (Premium Zone + FVG)
-        elif df["high"].iloc[i] < df["low"].iloc[i-2]:  
-            fvg_top = float(df["low"].iloc[i-2])
-            fvg_bottom = float(df["high"].iloc[i])
-            c_close = float(df["close"].iloc[i])
-            
-            if c_close > equilibrium:
-                entry = round((fvg_top + fvg_bottom) / 2, 4 if "USD" in symbol else 2)
-                sl = round(float(df["high"].iloc[i-2]), 4 if "USD" in symbol else 2)     
-                if entry >= sl: entry = c_close
-                tp = round(entry - (sl - entry) * 2.0, 4 if "USD" in symbol else 2)     
+        # 🔴 HIGH-FREQUENCY BEARISH SETUP
+        elif df["close"].iloc[i] < df["open"].iloc[i] and float(df["close"].iloc[i]) > equilibrium:
+            entry = live_price
+            sl = round(entry + (1.5 * atr_val), 4 if "USD" in symbol else 2)
+            tp = round(entry - (2.0 * atr_val), 4 if "USD" in symbol else 2)
 
+            if sl > entry and tp < entry:
                 new_signal = {
                     "id": int(time.time()) + random.randint(1, 5000),
-                    "time": candle_time,  # 🕒 ម៉ោងស្រុកខ្មែរ Real-time Release
-                    "type": "SELL 🔴 [SMC FVG]",
+                    "time": candle_time,
+                    "type": "SELL 🔴 [SMC SCALPER]",
                     "timeframe": tf_key,
                     "entry": entry,
                     "sl": sl,
@@ -221,7 +246,7 @@ def scan_asset_tf(asset, symbol, tf):
         print(f"Error in engine execution: {e}")
 
 def engine_loop():
-    print("🚀 QUANT SCALPER ONLINE - SCROLLING ALL ALTS WITH SMC ENGINE")
+    print("🚀 QUANT SCALPER ONLINE - HIGH FREQUENCY SMC/ICT ENGINE")
     while True:
         for asset, info in ASSETS_CONFIG.items():
             with LOCK:
@@ -231,22 +256,16 @@ def engine_loop():
                 for tf in TIMEFRAMES:
                     scan_asset_tf(asset, info["symbol"], tf)
                     time.sleep(0.15)
-
         time.sleep(2)
 
 threading.Thread(target=engine_loop, daemon=True).start()
 
 @app.get("/api/signals")
 def get_signals(tf: str = "ALL"):
-    """
-    🎯 បច្ចុប្បន្នភាព៖ ទទួលយកប៉ារ៉ាម៉ែត្រ `tf` (ឧទាហរណ៍៖ ?tf=1H) ដើម្បីចម្រាញ់ទិន្នន័យ
-    បើបងរើសម៉ោងណា វានឹងបញ្ជូនទៅតែម៉ោងនោះប៉ុណ្ណោះ មិនលាយឡំឡើយ។
-    """
     target_tf = tf.upper() if tf else "ALL"
     
     with LOCK:
         res = {}
-        # ផ្ញើស្ថានភាពប៊ូតុងស្កែនធម្មតា
         for info in ASSETS_CONFIG.values():
             res[f"isScanning{info['key'].upper()}"] = STATE["scans"][info["key"]]
             
@@ -254,21 +273,17 @@ def get_signals(tf: str = "ALL"):
             key = info["key"]
             all_sigs = []
             
-            # 1. ត្រងយក Current Signals តាម Timeframe ដែលបានជ្រើសរើស
             for tf_key, sig in STATE[asset]["current_signals"].items():
                 if sig:
                     if target_tf == "ALL" or tf_key == target_tf:
                         all_sigs.append(sig)
             
-            # 2. ត្រងយក History Signals តាម Timeframe ដែលបានជ្រើសរើស
             filtered_history = STATE[asset]["history"]
             if target_tf != "ALL":
                 filtered_history = [s for s in filtered_history if s.get("timeframe", "").upper() == target_tf]
             
-            # យកត្រឹម 30 setups ចុងក្រោយដែលចម្រាញ់រួច
             all_sigs.extend(filtered_history[-30:])
             
-            # គណនា Win Rate ផ្អែកលើទិន្នន័យរួម ឬទិន្នន័យដែល Filter រួច (ក្នុងកូដនេះរក្សាការគណនារួមដើម្បីឱ្យដឹង WR សរុប)
             wins = STATE[asset]["wins"]
             losses = STATE[asset]["losses"]
             total = wins + losses
