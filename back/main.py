@@ -1,44 +1,54 @@
-import pandas as pd
-import time
-import yfinance as yf
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-import threading
-import uvicorn
-import random
 import os
+import time
 import datetime
-from pymongo import MongoClient
+import random
+import threading
+import pandas as pd
+import yfinance as yf
 import certifi
+import uvicorn
+from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pymongo import MongoClient
 
-app = FastAPI()
+app = FastAPI(title="AI Trading Bot Multi-Asset Dashboard API")
 
+# 🌐 បើកទ្វារ CORS សម្រាប់ឱ្យ React (Front-end) ទាញទិន្នន័យបានសេរី
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 LOCK = threading.Lock()
 
-# 🌐 លីងភ្ជាប់ទៅកាន់ MongoDB Cloud (បានកែសម្រួលសញ្ញា $ ទៅជា %24 រួចរាល់ដើម្បីការពារ Error)
+# 🌐 លីងភ្ជាប់ទៅកាន់ MongoDB Cloud (ប្រើប្រាស់ Environment Variable ឬ Fallback ទៅលីងដើមដែលមាន %24 រួចជាស្រេច)
 MONGO_URI = os.environ.get(
     "MONGO_URI", 
     "mongodb+srv://angsoty:Angsotyada%240212%24@bot-trading.3017bkt.mongodb.net/?appName=bot-trading"
 )
 
+db = None
+collection = None
+
 try:
-    client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
+    # 🛡️ បន្ថែមអាវក្រោះការពារការដាច់ SSL Handshake លើម៉ាស៊ីន Render [Bypass TLS/SSL Issues]
+    client = MongoClient(
+        MONGO_URI, 
+        tlsCAFile=certifi.where(),
+        tlsAllowInvalidCertificates=True,
+        serverSelectionTimeoutMS=5000
+    )
+    client.admin.command('ping') # តេស្តល្បឿនតភ្ជាប់
     db = client["XAU_ICT_SMC_SCALPER"]
     collection = db["bot_state"]
-    print("✅ CONNECTED TO MONGODB ATLAS CLOUD DATABASE")
+    print("🟢 CONNECTED TO MONGODB ATLAS CLOUD DATABASE SUCCESSFULLY")
 except Exception as e:
     print(f"❌ MongoDB Connection Error: {e}")
-    db = None
-    collection = None
 
-# 🎯 បញ្ជីកាក់ដែលត្រូវរត់ការស្កែន (Supported Assets Configuration)
+# 🎯 បញ្ជីកាក់ និងទ្រព្យសកម្មដែលត្រូវរត់ការស្កែន (Supported Assets Configuration)
 ASSETS_CONFIG = {
     "BTCUSDT": {"symbol": "BTC-USD", "key": "btc"},
     "XAUUSD": {"symbol": "GC=F", "key": "xau"},
@@ -78,14 +88,20 @@ def save_data_to_file():
                 "wins": STATE[asset]["wins"],
                 "losses": STATE[asset]["losses"]
             }
+        # រក្សាទុកស្ថានភាពប៊ូតុង Scans ដែរដើម្បីកុំឱ្យវាបិទវិញពេល Server ដេកលក់
+        scans_to_save = STATE["scans"]
+
     try:
         collection.update_one(
             {"_id": "global_state"},
-            {"$set": {"assets_data": data_to_save}},
+            {"$set": {
+                "assets_data": data_to_save,
+                "scans_data": scans_to_save
+            }},
             upsert=True
         )
     except Exception as e:
-        print(f"Error saving to MongoDB: {e}")
+        print(f"❌ Error saving to MongoDB: {e}")
 
 def load_data_from_file():
     """ 📦 ទាញយកទិន្នន័យចាស់មកវិញភ្លាមពេល Bot ចាប់ផ្តើមរាន់ """
@@ -94,21 +110,33 @@ def load_data_from_file():
         
     try:
         saved_record = collection.find_one({"_id": "global_state"})
-        if saved_record and "assets_data" in saved_record:
-            saved_data = saved_record["assets_data"]
-            for asset in ASSETS_CONFIG.keys():
-                if asset in saved_data:
-                    STATE[asset]["current_signals"] = saved_data[asset].get("current_signals", {"5M": None, "15M": None, "1H": None, "4H": None})
-                    STATE[asset]["last_processed_candle"] = saved_data[asset].get("last_processed_candle", {"5M": "", "15M": "", "1H": "", "4H": ""})
-                    STATE[asset]["history"] = saved_data[asset].get("history", [])
-                    STATE[asset]["wins"] = saved_data[asset].get("wins", 0)
-                    STATE[asset]["losses"] = saved_data[asset].get("losses", 0)
+        if saved_record:
+            with LOCK:
+                # 1. ស្ដារទិន្នន័យរបស់កាក់នីមួយៗ
+                if "assets_data" in saved_record:
+                    saved_data = saved_record["assets_data"]
+                    for asset in ASSETS_CONFIG.keys():
+                        if asset in saved_data:
+                            STATE[asset]["current_signals"] = saved_data[asset].get("current_signals", {"5M": None, "15M": None, "1H": None, "4H": None})
+                            STATE[asset]["last_processed_candle"] = saved_data[asset].get("last_processed_candle", {"5M": "", "15M": "", "1H": "", "4H": ""})
+                            STATE[asset]["history"] = saved_data[asset].get("history", [])
+                            STATE[asset]["wins"] = saved_data[asset].get("wins", 0)
+                            STATE[asset]["losses"] = saved_data[asset].get("losses", 0)
+                
+                # 2. ស្ដារស្ថានភាពប៊ូតុងបិទបើក (Scan Toggles)
+                if "scans_data" in saved_record:
+                    saved_scans = saved_record["scans_data"]
+                    for k in STATE["scans"].keys():
+                        if k in saved_scans:
+                            STATE["scans"][k] = saved_scans[k]
+
             print("📦 MULTI-ASSET CLOUD DATABASE INITIALIZED SUCCESSFUL")
         else:
             print("🆕 No existing cloud state found. Starting with fresh records.")
     except Exception as e:
-        print(f"Error loading from MongoDB: {e}")
+        print(f"❌ Error loading from MongoDB: {e}")
 
+# ហៅទាញទិន្នន័យពី Cloud មកដាក់ចូល RAM ភ្លាមៗ
 load_data_from_file()
 TIMEFRAMES = ["5m", "15m", "1h", "4h"]
 
@@ -183,14 +211,14 @@ def scan_asset_tf(asset, symbol, tf):
         if raw_candle_stamp == last_candle:
             return
 
-        # 📊 គណនា ATR (Average True Range) ដើម្បីទប់ទល់នឹង Market Noise របស់មាស
+        # 📊 គណនា ATR (Average True Range)
         df['tr'] = pd.concat([df['high'] - df['low'], 
                               (df['high'] - df['close'].shift()).abs(), 
                               (df['low'] - df['close'].shift()).abs()], axis=1).max(axis=1)
         df['atr'] = df['tr'].rolling(window=14).mean()
         atr_val = float(df['atr'].iloc[i]) if not pd.isna(df['atr'].iloc[i]) else (live_price * 0.001)
 
-        # គណនារកតំបន់ Equilibrium (Lookback 10 ទៀន ដើម្បីឱ្យចេញ Signal ញឹក និងលឿនទាន់ចិត្ត)
+        # គណនារកតំបន់ Equilibrium (Lookback 10 ទៀន)
         recent_max = df["high"].iloc[i-9:i+1].max()
         recent_min = df["low"].iloc[i-9:i+1].min()
         equilibrium = recent_min + (recent_max - recent_min) * 0.5
@@ -243,7 +271,7 @@ def scan_asset_tf(asset, symbol, tf):
             save_data_to_file()
 
     except Exception as e:
-        print(f"Error in engine execution: {e}")
+        print(f"❌ Error in engine execution: {e}")
 
 def engine_loop():
     print("🚀 QUANT SCALPER ONLINE - HIGH FREQUENCY SMC/ICT ENGINE")
@@ -258,6 +286,7 @@ def engine_loop():
                     time.sleep(0.15)
         time.sleep(2)
 
+# បើកដំណើរការ Thread ស្កែននៅ Background
 threading.Thread(target=engine_loop, daemon=True).start()
 
 @app.get("/api/signals")
@@ -273,11 +302,13 @@ def get_signals(tf: str = "ALL"):
             key = info["key"]
             all_sigs = []
             
+            # បញ្ចូល Signal ដែលកំពុងរត់ (Open Positions)
             for tf_key, sig in STATE[asset]["current_signals"].items():
                 if sig:
                     if target_tf == "ALL" or tf_key == target_tf:
                         all_sigs.append(sig)
             
+            # បញ្ចូលប្រវត្តិជួញដូរ (History)
             filtered_history = STATE[asset]["history"]
             if target_tf != "ALL":
                 filtered_history = [s for s in filtered_history if s.get("timeframe", "").upper() == target_tf]
@@ -306,6 +337,8 @@ def toggle_asset(asset_key: str):
         for asset, info in ASSETS_CONFIG.items():
             if info["key"] == target_key:
                 STATE["scans"][target_key] = not STATE["scans"][target_key]
+                # រក្សាទុកស្ថានភាពប៊ូតុងចូល Cloud ភ្លាម
+                threading.Thread(target=save_data_to_file).start()
                 return {f"isScanning{target_key.upper()}": STATE["scans"][target_key]}
     return {"error": "Invalid asset key"}
 
@@ -323,9 +356,9 @@ def clear_history_only(asset_key: str):
                 return {"message": f"Successfully cleared history for {asset}"}
     return {"error": "Invalid asset key"}
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-
 @app.get("/healthz")
 def health():
     return {"status": "ok"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
