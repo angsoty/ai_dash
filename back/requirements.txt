@@ -15,7 +15,6 @@ idna==3.11
 joblib==1.5.3
 markdown-it-py==4.2.0
 mdurl==0.1.2
-metatrader5==5.0.5735
 multitasking==0.0.13
 narwhals==2.22.1
 numpy==2.4.6
