@@ -275,7 +275,7 @@ export function Exchange() {
                     {/* SIGNALS LIST */}
                     <div className="p-3 overflow-y-auto space-y-3 flex-1">
                         <div className="text-[10px] font-bold text-center text-gray-500 mb-1">
-                            {viewMode === "LIVE" ? "👇 បង្ហាញគ្រាប់ចុងក្រោយបង្អស់ (ល្បឿន UI ស្រាល)" : `📜 កំពុងទាញទិន្នន័យពី DB ទាំងស្រុង (${signals.length} គ្រាប់)`}
+                            {viewMode === "LIVE" ? "👇 New Signal" : `📜 Trading History (${signals.length}📜 )`}
                         </div>
                         {signals.length === 0 ? (
                             <div className="text-gray-600 text-xs text-center mt-10 animate-pulse">
