@@ -12,7 +12,6 @@ type SignalData = {
     status: string;
 };
 
-// 🎯 បញ្ជីកាក់ដែលត្រូវបង្ហាញលើប៊ូតុងជ្រើសរើស (Supported Coins Mapping)
 const SUPPORTED_ASSETS = [
     { key: "btc", label: "₿ BTCUSDT", tvSymbol: "BINANCE:BTCUSDT" },
     { key: "xau", label: "📿 XAUUSD (GOLD)", tvSymbol: "FX:XAUUSD" },
@@ -31,86 +30,95 @@ export function Exchange() {
     const [statLosses, setStatLosses] = useState(0);
     const [signals, setSignals] = useState<SignalData[]>([]);
     
-    // 🔘 រក្សាទុកស្ថានភាពប៊ូតុងស្កែនទាំងអស់នៅក្នុង Object តែមួយ (Dynamic Scans State)
+    // 🔘 បន្ថែម State សម្រាប់បិទបើកមើលលទ្ធផល Live (100គ្រាប់) ឬ មើល History ទាំងអស់ពី DB
+    const [viewMode, setViewMode] = useState<"LIVE" | "HISTORY">("LIVE");
+
     const [scans, setScans] = useState<Record<string, boolean>>({
         btc: false, xau: false, sol: false, bnb: false, ada: false, zec: false
     });
 
     const [asset, setAsset] = useState<AssetKey>("xau");
     const [price, setPrice] = useState<number>(0);
-    
-    // 🎯 ប្តូរលំនាំដើមមក Lock 1H ដើម្បីកុំឱ្យ Random Signal លោតមកញ៉េរញ៉ៃ
     const [selectedTF, setSelectedTF] = useState<"ALL" | "5M" | "15M" | "1H" | "4H">("1H");
 
     const containerRef = useRef<HTMLDivElement>(null);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    // 🌐 បច្ចុប្បន្នភាពលីងទៅកាន់ Render Host ផ្លូវការរបស់បង
     const API = "https://ai-dash-bx4b.onrender.com/api";
 
-    // 🔄 ទាញទិន្នន័យដោយភ្ជាប់ជាមួយ ?tf=... ទៅឱ្យប្រព័ន្ធ Back-end កាត់តម្រឹម
-    const fetchSignals = async (currentAsset = asset, currentTF = selectedTF) => {
+    // 🔄 មុខងារទាញទិន្នន័យ (ហៅដាច់ដោយឡែកតាម View Mode)
+    const fetchSignals = async (currentAsset = asset, currentTF = selectedTF, mode = viewMode) => {
         try {
-            const res = await fetch(`${API}/signals?tf=${currentTF}`);
-            if (!res.ok) throw new Error("Offline");
-            const data = await res.json();
+            if (mode === "LIVE") {
+                // 🟢 Mode LIVE: ហៅទៅកាន់ Endpoint ធម្មតា (ល្បឿនលឿន ងាយស្រួល Polling រាល់ ២ វិនាទី)
+                const res = await fetch(`${API}/signals`);
+                if (!res.ok) throw new Error("Offline");
+                const data = await res.json();
 
-            // ទាញយកស្ថានភាពប៊ុងតុងស្កែនទាំងអស់មកបច្ចុប្បន្នភាពលើ UI
-            setScans({
-                btc: data.isScanningBTC,
-                xau: data.isScanningXAU,
-                sol: data.isScanningSOL,
-                bnb: data.isScanningBNB,
-                ada: data.isScanningADA,
-                zec: data.isScanningZEC
-            });
+                setScans({
+                    btc: data.isScanningBTC, xau: data.isScanningXAU, sol: data.isScanningSOL,
+                    bnb: data.isScanningBNB, ada: data.isScanningADA, zec: data.isScanningZEC
+                });
 
-            // ចាប់យកទិន្នន័យកាក់ចរន្តពី Backend Dynamic Key (btc, xau, sol, ...)
-            const selected = data[currentAsset];
+                const selected = data[currentAsset];
+                if (selected) {
+                    setPrice(selected.price || 0);
+                    setTotalTrades(selected.totalTrades || 0);
+                    setWinRate(selected.winRate || 0.00);
+                    setStatWins(selected.wins || 0);
+                    setStatLosses(selected.losses || 0);
 
-            if (selected) {
-                setSignals(selected.signals || []);
-                setPrice(selected.price || 0);
-                setTotalTrades(selected.totalTrades || 0);
-                setWinRate(selected.winRate || 0.00);
-                setStatWins(selected.wins || 0);
-                setStatLosses(selected.losses || 0);
+                    // ចម្រោះតាម Timeframe លើ Front-end បន្ថែមសម្រាប់ការបង្ហាញក្នុង Mode Live
+                    const rawSignals: SignalData[] = selected.signals || [];
+                    if (currentTF === "ALL") {
+                        setSignals(rawSignals);
+                    } else {
+                        setSignals(rawSignals.filter(s => s.timeframe.toUpperCase() === currentTF));
+                    }
+                }
+            } else {
+                // 📜 Mode HISTORY: ហៅទៅកាន់ Endpoint ថ្មីដើម្បីទាញយក All Records ទាំងអស់ពី DB មកបង្ហាញ
+                const res = await fetch(`${API}/history/${currentAsset}?tf=${currentTF}`);
+                if (!res.ok) throw new Error("Offline");
+                const data = await res.json();
+                
+                if (data && data.history) {
+                    setSignals(data.history); // បង្ហាញរាល់ប្រវត្តិជួញដូរទាំងអស់គ្មានដែនកំណត់
+                }
             }
         } catch (err) {
             console.log("Backend connection offline...");
         }
     };
 
-    // រត់ទាញទិន្នន័យរៀងរាល់ ២ វិនាទីម្តង ពេលមានការផ្លាស់ប្តូរ Asset ឬ Timeframe
+    // រត់ Polling ២ វិនាទីម្តង តែអនុវត្តន៍ចំពោះតែ LIVE Mode ប៉ុណ្ណោះ (កុំឱ្យណែនបណ្តាញពេលបើកមើល History ធំ)
     useEffect(() => {
-        fetchSignals(asset, selectedTF);
+        fetchSignals(asset, selectedTF, viewMode);
+        
         if (intervalRef.current) clearInterval(intervalRef.current);
-        intervalRef.current = setInterval(() => fetchSignals(asset, selectedTF), 2000);
+        
+        if (viewMode === "LIVE") {
+            intervalRef.current = setInterval(() => fetchSignals(asset, selectedTF, "LIVE"), 2000);
+        }
 
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current);
         };
-    }, [asset, selectedTF]);
+    }, [asset, selectedTF, viewMode]);
 
-    // ⚡ មុខងារចុចប៊ូតុង Toggle Scan ដាច់ដោយឡែកពីគ្នាពិតប្រាកដ
     const handleToggleScan = async () => {
         try {
             const res = await fetch(`${API}/toggle-scan/${asset}`, { method: "POST" });
             const data = await res.json();
-            
             const responseKey = `isScanning${asset.toUpperCase()}`;
-            setScans(prev => ({
-                ...prev,
-                [asset]: data[responseKey]
-            }));
-
-            setTimeout(() => fetchSignals(asset, selectedTF), 200);
+            setScans(prev => ({ ...prev, [asset]: data[responseKey] }));
+            setTimeout(() => fetchSignals(asset, selectedTF, viewMode), 200);
         } catch {
             alert("Backend Connection Refused");
         }
     };
 
-    // 📈 រៀបចំ TradingView Widget - ផ្លាស់ប្តូរទៀនស្វ័យប្រវត្តិតាមប៊ូតុង Timeframe លើ UI
+    // 📈 TradingView Widget
     useEffect(() => {
         if (!containerRef.current) return;
         containerRef.current.innerHTML = "";
@@ -126,8 +134,6 @@ export function Exchange() {
         script.onload = () => {
             if (window.TradingView) {
                 const currentConfig = SUPPORTED_ASSETS.find(a => a.key === asset);
-                
-                // 💡 បំប្លែងតួអក្សរ Timeframe ទៅជា Interval របស់ TradingView Widget
                 let tvInterval = "60"; 
                 if (selectedTF === "5M") tvInterval = "5";
                 else if (selectedTF === "15M") tvInterval = "15";
@@ -138,18 +144,18 @@ export function Exchange() {
                     autosize: true,
                     symbol: currentConfig ? currentConfig.tvSymbol : "BINANCE:BTCUSD",
                     interval: tvInterval,         
-                    timezone: "Asia/Jakarta",      // 🇰🇭 ប្រើប្រាស់ល្វែងម៉ោង GMT+7 ដែល Widget ស្គាល់ផ្លូវការ
+                    timezone: "Asia/Jakarta",
                     theme: "dark",
                     style: "1",
                     locale: "en",
                     container_id: id,
-                    hide_top_toolbar: false,      // 🔥 បើករបារឧបករណ៍ខាងលើ ដើម្បីបង្ហាញប៊ូតុងដូរ Timeframe សេរី
-                    hide_side_toolbar: false,     // បើករបារឧបករណ៍ឆ្វេងសម្រាប់គូរគំនូសបច្គេកទេស
-                    allow_symbol_change: true,    // អនុញ្ញាតឱ្យផ្លាស់ប្តូរគូកាក់នៅលើ Widget បាន
+                    hide_top_toolbar: false,
+                    hide_side_toolbar: false,
+                    allow_symbol_change: true,
                     enable_publishing: false,
-                    withdateranges: true,         // បើកទិន្នន័យ Range ម៉ោងតាមតំបន់
+                    withdateranges: true,
                     hide_ideas: true,
-                    data_status: "streaming"      // បង្ខំឱ្យវាជម្រុញទិន្នន័យ Live តាមម៉ោងពិត
+                    data_status: "streaming"
                 });
             }
         };
@@ -158,7 +164,7 @@ export function Exchange() {
         return () => {
             if (containerRef.current) containerRef.current.innerHTML = "";
         };
-    }, [asset, selectedTF]); // 🔄 បើកក្រាហ្វឡើងវិញភ្លាមៗ ពេលប្តូរ Timeframe ឬប្តូរកាក់
+    }, [asset, selectedTF]);
 
     const isCurrentAssetScanning = scans[asset] || false;
     const decimalPlaces = asset === "ada" ? 4 : 2;
@@ -215,7 +221,7 @@ export function Exchange() {
 
                 {/* SIGNALS SIDEBAR */}
                 <div className="border border-gray-800 rounded-xl flex flex-col bg-black/20" style={{ height: "80vh" }}>
-                    <div className="p-3 border-b border-gray-800 bg-black/40 text-[11px] space-y-1.5">
+                    <div className="p-3 border-b border-gray-800 bg-black/40 space-y-1.5">
                         <div className="font-bold text-[12.5px] text-gray-300 flex justify-between">
                             <span>📊 Bot Signal Monitor</span>
                             <span className="text-blue-400">Total: {totalTrades}</span>
@@ -224,6 +230,30 @@ export function Exchange() {
                             <div className="text-green-400">✅ TP: {statWins}</div>
                             <div className="text-red-400">❌ SL: {statLosses}</div>
                             <div className="text-yellow-400">🎯 WR: {winRate.toFixed(1)}%</div>
+                        </div>
+
+                        {/* 🔘 ផ្ទាំងប៊ូតុងជ្រើសរើសរបៀបមើល (LIVE VS HISTORY SWITCHER) */}
+                        <div className="grid grid-cols-2 gap-1 pt-1">
+                            <button
+                                onClick={() => setViewMode("LIVE")}
+                                className={`py-1 text-[10px] font-bold rounded transition-all border ${
+                                    viewMode === "LIVE" 
+                                        ? "bg-emerald-500/10 border-emerald-500 text-emerald-400" 
+                                        : "border-gray-800 text-gray-500"
+                                }`}
+                            >
+                                🟢 LIVE SCREEN (100)
+                            </button>
+                            <button
+                                onClick={() => setViewMode("HISTORY")}
+                                className={`py-1 text-[10px] font-bold rounded transition-all border ${
+                                    viewMode === "HISTORY" 
+                                        ? "bg-purple-500/10 border-purple-500 text-purple-400" 
+                                        : "border-gray-800 text-gray-500"
+                                }`}
+                            >
+                                📜 ALL HISTORY (DB)
+                            </button>
                         </div>
                     </div>
 
@@ -244,9 +274,12 @@ export function Exchange() {
 
                     {/* SIGNALS LIST */}
                     <div className="p-3 overflow-y-auto space-y-3 flex-1">
+                        <div className="text-[10px] font-bold text-center text-gray-500 mb-1">
+                            {viewMode === "LIVE" ? "👇 បង្ហាញគ្រាប់ចុងក្រោយបង្អស់ (ល្បឿន UI ស្រាល)" : `📜 កំពុងទាញទិន្នន័យពី DB ទាំងស្រុង (${signals.length} គ្រាប់)`}
+                        </div>
                         {signals.length === 0 ? (
                             <div className="text-gray-600 text-xs text-center mt-10 animate-pulse">
-                                No active setups on {selectedTF} loop...
+                                No records found on {selectedTF} loop...
                             </div>
                         ) : (
                             signals.map((s) => (
